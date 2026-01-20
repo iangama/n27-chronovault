@@ -1,0 +1,193 @@
+name: n27-chronovault
+
+networks:
+  n27_chronovault_net:
+    name: n27_chronovault_net
+
+volumes:
+  n27_chronovault_pgdata:
+  n27_chronovault_grafana:
+  n27_chronovault_loki:
+
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: n27-chronovault-traefik
+    labels:
+      - "chronovault.stack=true"
+      - "traefik.enable=true"
+      # Dashboard/API interna no entrypoint traefik (host 8081 -> container 8080)
+      - "traefik.http.routers.chronovault-traefik.rule=PathPrefix(`/dashboard`) || PathPrefix(`/api`)"
+      - "traefik.http.routers.chronovault-traefik.entrypoints=traefik"
+      - "traefik.http.routers.chronovault-traefik.service=api@internal"
+    command:
+      - "--configFile=/etc/traefik/traefik.yml"
+    ports:
+      - "8880:8880"
+      - "8443:8443"
+      - "8081:8080"
+    volumes:
+      - "./infra/traefik/traefik.yml:/etc/traefik/traefik.yml:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks: [n27_chronovault_net]
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: n27-chronovault-postgres
+    labels: ["chronovault.stack=true"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - "n27_chronovault_pgdata:/var/lib/postgresql/data"
+      - "./infra/sql/init.sql:/docker-entrypoint-initdb.d/00-init.sql:ro"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+    networks: [n27_chronovault_net]
+
+  redis:
+    image: redis:7-alpine
+    container_name: n27-chronovault-redis
+    labels: ["chronovault.stack=true"]
+    command: ["redis-server","--save","","--appendonly","no"]
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 40
+    networks: [n27_chronovault_net]
+
+  api:
+    build: { context: ./services/api }
+    container_name: n27-chronovault-api
+    labels:
+      - "chronovault.stack=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.chronovault-api.rule=PathPrefix(`/api`)"
+      - "traefik.http.routers.chronovault-api.entrypoints=web"
+      - "traefik.http.routers.chronovault-api.priority=100"
+      - "traefik.http.routers.chronovault-api.middlewares=chronovault-strip-api"
+      - "traefik.http.middlewares.chronovault-strip-api.stripPrefix.prefixes=/api"
+      - "traefik.http.services.chronovault-api.loadbalancer.server.port=3000"
+    environment:
+      NODE_ENV: ${NODE_ENV}
+      APP_VERSION: ${APP_VERSION}
+      HASH_SALT: ${HASH_SALT}
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGHOST: postgres
+      PGPORT: 5432
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/health | grep -q '\"ok\":true'"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+    networks: [n27_chronovault_net]
+
+  worker:
+    build: { context: ./services/worker }
+    container_name: n27-chronovault-worker
+    labels: ["chronovault.stack=true"]
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGHOST: postgres
+      PGPORT: 5432
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3001/health | grep -q '\"ok\":true'"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+    networks: [n27_chronovault_net]
+
+  ui:
+    build: { context: ./services/ui }
+    container_name: n27-chronovault-ui
+    labels:
+      - "chronovault.stack=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.chronovault-ui.rule=PathPrefix(`/`)"
+      - "traefik.http.routers.chronovault-ui.entrypoints=web"
+      - "traefik.http.routers.chronovault-ui.priority=10"
+      - "traefik.http.services.chronovault-ui.loadbalancer.server.port=80"
+    depends_on:
+      api: { condition: service_healthy }
+    networks: [n27_chronovault_net]
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: n27-chronovault-prometheus
+    labels:
+      - "chronovault.stack=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.chronovault-prom.rule=PathPrefix(`/prometheus`)"
+      - "traefik.http.routers.chronovault-prom.entrypoints=web"
+      - "traefik.http.routers.chronovault-prom.priority=60"
+      - "traefik.http.services.chronovault-prom.loadbalancer.server.port=9090"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--web.route-prefix=/prometheus"
+      - "--web.external-url=/prometheus"
+    volumes:
+      - "./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+    networks: [n27_chronovault_net]
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: n27-chronovault-grafana
+    labels:
+      - "chronovault.stack=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.chronovault-grafana.rule=PathPrefix(`/grafana`)"
+      - "traefik.http.routers.chronovault-grafana.entrypoints=web"
+      - "traefik.http.routers.chronovault-grafana.priority=60"
+      - "traefik.http.services.chronovault-grafana.loadbalancer.server.port=3000"
+    environment:
+      GF_SERVER_ROOT_URL: "%(protocol)s://%(domain)s/grafana/"
+      GF_SERVER_SERVE_FROM_SUB_PATH: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Viewer"
+      GF_USERS_DEFAULT_THEME: "dark"
+    volumes:
+      - "n27_chronovault_grafana:/var/lib/grafana"
+      - "./infra/grafana/provisioning:/etc/grafana/provisioning:ro"
+    networks: [n27_chronovault_net]
+
+  loki:
+    image: grafana/loki:3.1.1
+    container_name: n27-chronovault-loki
+    labels:
+      - "chronovault.stack=true"
+      - "traefik.enable=true"
+      - "traefik.http.routers.chronovault-loki.rule=PathPrefix(`/loki`)"
+      - "traefik.http.routers.chronovault-loki.entrypoints=web"
+      - "traefik.http.routers.chronovault-loki.priority=60"
+      - "traefik.http.services.chronovault-loki.loadbalancer.server.port=3100"
+    command: ["-config.file=/etc/loki/loki.yml"]
+    volumes:
+      - "./infra/loki/loki.yml:/etc/loki/loki.yml:ro"
+      - "n27_chronovault_loki:/loki-data"
+    networks: [n27_chronovault_net]
+
+  promtail:
+    image: grafana/promtail:3.1.1
+    container_name: n27-chronovault-promtail
+    labels: ["chronovault.stack=true"]
+    command: ["-config.file=/etc/promtail/promtail.yml"]
+    volumes:
+      - "./infra/promtail/promtail.yml:/etc/promtail/promtail.yml:ro"
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - "/tmp:/tmp"
+    networks: [n27_chronovault_net]

@@ -1,0 +1,23 @@
+:root{--bg:#0b0f14;--panel:#0f1620;--muted:#9fb0c0;--text:#e6edf3;--border:#1f2a37;--ok:#86efac;--warn:#fde68a;--bad:#fca5a5;--shadow:0 10px 30px rgba(0,0,0,.35);--r:16px;--mono:ui-monospace,Menlo,Consolas,monospace}
+*{box-sizing:border-box} html,body{height:100%}
+body{margin:0;background:radial-gradient(900px 500px at 20% 0%, rgba(125,211,252,.10), transparent 60%),radial-gradient(900px 500px at 80% 10%, rgba(134,239,172,.08), transparent 60%),var(--bg);color:var(--text);font-family:system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+.container{display:grid;grid-template-columns:280px 1fr;min-height:100vh}
+.sidebar{border-right:1px solid var(--border);background:linear-gradient(180deg, rgba(15,22,32,.9), rgba(12,19,27,.85));padding:18px;position:sticky;top:0;height:100vh}
+.brand{display:flex;gap:10px;align-items:center;padding:10px 12px;border:1px solid var(--border);border-radius:14px;background:rgba(15,22,32,.6);box-shadow:var(--shadow)}
+.logo{width:34px;height:34px;border-radius:12px;background:conic-gradient(from 180deg, rgba(125,211,252,.9), rgba(134,239,172,.9), rgba(125,211,252,.9))}
+.nav{margin-top:14px;display:flex;flex-direction:column;gap:8px}
+.nav a{padding:10px 12px;border-radius:12px;color:var(--muted)}
+.nav a.active{color:var(--text);border:1px solid var(--border);background:rgba(15,22,32,.55)}
+.main{padding:22px 22px 48px}
+.card{border:1px solid var(--border);border-radius:var(--r);background:rgba(15,22,32,.55);box-shadow:var(--shadow)}
+.inner{padding:16px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.input,textarea,select{width:100%;background:rgba(12,19,27,.6);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:14px;outline:none}
+textarea{min-height:110px;resize:vertical}
+.btn{background:rgba(125,211,252,.12);border:1px solid rgba(125,211,252,.35);color:var(--text);padding:10px 12px;border-radius:14px;cursor:pointer}
+.btn.primary{background:rgba(134,239,172,.14);border-color:rgba(134,239,172,.35)}
+.badge{font-family:var(--mono);font-size:12px;padding:4px 8px;border-radius:999px;border:1px solid var(--border);color:var(--muted)}
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{border-bottom:1px solid var(--border);padding:10px;text-align:left;color:var(--muted);font-size:13px}
+.table th{color:var(--text);font-weight:600}
+.mono{font-family:var(--mono)} .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}

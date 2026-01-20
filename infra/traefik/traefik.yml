@@ -1,0 +1,34 @@
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+entryPoints:
+  web:
+    address: ":8880"
+  websecure:
+    address: ":8443"
+  traefik:
+    address: ":8080"
+  metrics:
+    address: ":9100"
+
+api:
+  dashboard: true
+
+log:
+  level: INFO
+accessLog: {}
+
+providers:
+  docker:
+    exposedByDefault: false
+    watch: true
+    constraints: "Label(`chronovault.stack`,`true`)"
+    network: "n27_chronovault_net"
+
+metrics:
+  prometheus:
+    entryPoint: metrics
+    addEntryPointsLabels: true
+    addRoutersLabels: true
+    addServicesLabels: true
