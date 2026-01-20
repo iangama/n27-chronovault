@@ -23,7 +23,7 @@ Observabilidade:
 - Smoke end-to-end reproduzível (subir e validar sem conserto manual)
 
 
-## Arquitetura (alto nível)
+## Arquitetura 
 
 Gateway:
 - Traefik expõe tudo em http://localhost:8880
